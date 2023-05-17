@@ -41,7 +41,7 @@ func main() {
 	btmgmt.SetLe(true)
 	btmgmt.SetPrivacy(false)
 	btmgmt.SetFastConnectable(true)
-	btmgmt.SetLinkLevelSecurity(false)
+	//btmgmt.SetLinkLevelSecurity(false)
 	btmgmt.SetBondable(false)
 	btmgmt.SetPowered(true)
 
