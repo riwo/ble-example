@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"os/signal"
 
 	api "github.com/muka/go-bluetooth/api"
@@ -27,23 +28,26 @@ func main() {
 		log.Panicf("failed to get default adapter id error: %v", err)
 	}
 
-	btmgmt := hw.NewBtMgmt(adapterID)
+	if os.Getenv("ENABLE_BTMGT") == "1" {
 
-	// Disable paring
-	err = btmgmt.SetPairable(false)
-	if err != nil {
-		log.Panicf("failed to set pairable off adapter id: error: %v", btmgmt.BinPath, err)
+		btmgmt := hw.NewBtMgmt(adapterID)
+
+		// Disable paring
+		err = btmgmt.SetPairable(false)
+		if err != nil {
+			log.Panicf("failed to set pairable off adapter id: error: %v", btmgmt.BinPath, err)
+		}
+
+		// set LE mode
+		btmgmt.SetPowered(false)
+		btmgmt.SetBredr(false)
+		btmgmt.SetLe(true)
+		btmgmt.SetPrivacy(false)
+		btmgmt.SetFastConnectable(true)
+		//btmgmt.SetLinkLevelSecurity(false)
+		btmgmt.SetBondable(false)
+		btmgmt.SetPowered(true)
 	}
-
-	// set LE mode
-	btmgmt.SetPowered(false)
-	btmgmt.SetBredr(false)
-	btmgmt.SetLe(true)
-	btmgmt.SetPrivacy(false)
-	btmgmt.SetFastConnectable(true)
-	//btmgmt.SetLinkLevelSecurity(false)
-	btmgmt.SetBondable(false)
-	btmgmt.SetPowered(true)
 
 	options := service.AppOptions{
 		AdapterID:         adapterID,
@@ -103,22 +107,23 @@ func main() {
 	}
 
 	chars := svc.GetChars()
-	log.Warnf("%v", chars)
+	log.Infof("%v", chars)
 
 	err = app.AddService(svc)
 	if err != nil {
 		log.Panicf("failed to add service error: %v", err)
 	}
 
+	properties := app.GetAdvertisement()
+	properties.MinInterval = 32
+	properties.MaxInterval = 56
+	properties.Includes = make([]string, 0)
+	app.SetLEAdvertisement(properties)
+
 	err = app.Run()
 	if err != nil {
 		log.Panicf("failed to run app error: %v", err)
 	}
-
-	adv := app.GetAdvertisement()
-	adv.MinInterval = 15
-	adv.MaxInterval = 30
-	adv.Discoverable = true
 
 	cf, err := app.Advertise(0)
 	if err != nil {
@@ -129,7 +134,21 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.TODO(), os.Interrupt)
 	defer stop()
 
+	// This is a hack which make(s) it works somehow?
+	if os.Getenv("DISABLE_BLUETOOTHCTL_HACK") != "1" {
+		cmd := exec.CommandContext(ctx, "bluetoothctl", "advertise", "on")
+		log.Warnf("Using: \"bluetoothctl advertise on\" hack to get the thing to work @ all")
+		_, err = cmd.Output()
+		if err != nil && ctx.Err() == nil {
+			log.Errorf("error from bluetoothctl: %v", err)
+		}
+		log.Warnf("exited bluetoothctl")
+	} else {
+		log.Info("Using normal bluetooth flow without workaround(s)")
+	}
+
 	<-ctx.Done()
+
 }
 
 func stringToCharReadCallback(f func() string) service.CharReadCallback {
